@@ -25,7 +25,7 @@ def weight_variable_fc(shape, layerno):
         Size of weight variable
     '''
 
-    W = 0.001*tf.get_variable("weight_%d"%layerno, shape=shape, initializer=tf.contrib.layers.xavier_initializer())
+    W = 0.005*tf.get_variable("weight_%d"%layerno, shape=shape, initializer=tf.contrib.layers.xavier_initializer())
     # W = tf.get_variable("weight_%d"%layerno, shape=shape, initializer=tf.zeros_initializer())
 
     return W
@@ -51,33 +51,25 @@ def bias_variable(layerno ,shape):
     B = tf.Variable(tf.constant(0.0, shape= shape, dtype=tf.float32), name="bias_%d"%layerno)
     return B
 
+def init_weights_trained(W, layerno, to_train):
+    return tf.Variable(W, trainable=to_train, name='weight_%d'%layerno)
 
-def init_weights(W, layerno, to_train):
-    init = tf.constant_initializer(W)
-    weight = tf.get_variable('weight_%d'%layerno, shape=W.shape, dtype=tf.float32, initializer= init, trainable = to_train)
-    return weight
+def init_bias_trained(B, layerno, to_train):
+    return tf.Variable(B, trainable=to_train, name='bias_%d'%layerno)
 
-def init_bias(B, layerno, to_train):
-    init = tf.constant_initializer(B)
-    bias = tf.get_variable('bias_%d'%layerno, shape=B.shape, dtype=tf.float32, initializer= init, trainable = to_train)
-    return bias
 
-def conv2d_batchnorm(x, W, b, name, phase, beta_r, gamma_r, mean_r, variance_r, layerno):
+def conv2d_batchnorm_load(x, W, name, phase, stride, beta_r, mean_r, variance_r, layerno):
 
     beta = tf.constant_initializer(beta_r)
-
-    gamma = tf.constant_initializer(gamma_r)
-
     moving_mean = tf.constant_initializer(mean_r)
-
     moving_variance = tf.constant_initializer(variance_r)
+
     with tf.name_scope(name):
-        mid1 =  tf.nn.conv2d(x, W, strides = [1,1,1,1], padding = "SAME") + b
+        mid1 =  tf.nn.conv2d(x, W, strides = stride, padding = "SAME", name="conv_%d"%layerno)
         mid2 = tf.nn.relu(mid1, 'relu')
 
         with tf.name_scope('batch_norm'):
-            return tf.contrib.layers.batch_norm(mid2, param_initializers={'beta': beta, 'gamma': gamma, 'moving_mean': moving_mean,'moving_variance': moving_variance,}, is_training = phase, updates_collections = None)
-            #return tf.nn.relu(mid2, 'relu')
+            return tf.contrib.layers.batch_norm(mid2, param_initializers={'beta': beta, 'moving_mean': moving_mean,'moving_variance': moving_variance,}, is_training = phase, updates_collections = None)
 
 def conv2d_batchnorm_init(x, W, name, phase, stride, padding):
     with tf.name_scope(name):

@@ -1,7 +1,7 @@
 DRAGON-NET
 ==========
 
-![alt text](http://images4.wikia.nocookie.net/__cb20111110055935/duelmasters/images/f/fd/BillionDegreeDragon.jpg)
+![alt text](https://vignette.wikia.nocookie.net/duelmasters/images/f/f9/%C3%9CberdragonBajula.jpg/revision/latest?cb=20130114050018)
 
 How to train your Dragon. (Vanilla Model)
 
