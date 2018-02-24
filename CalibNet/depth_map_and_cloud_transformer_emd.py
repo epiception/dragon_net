@@ -1,11 +1,6 @@
 import tensorflow as tf
 import numpy as np
 import model_utils
-import chamfer_dist_eg as cd
-# import matplotlib.pyplot as plt
-# import scipy.misc as smc
-# import cv2
-# import imageio as io
 
 IMG_HT = 375
 IMG_WDT = 1242

@@ -35,6 +35,11 @@ net_params = dict(
 	total_frames_validation = 6000,
 	partition_limit = 1200,
 	epochs = 40,
-	learning_rate = 7e-5,
-	beta1 = 0.9
+	learning_rate = 1e-4,
+	beta1 = 0.9,
+	resnet_path = "../../Extrinsic_Calibration_2/parameters.json",
+	alpha_const = 1.0,
+	beta_const = 1.0,
+	current_epoch = 0
+
 	)

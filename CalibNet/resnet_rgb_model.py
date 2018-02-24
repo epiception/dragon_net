@@ -2,8 +2,11 @@ import numpy as np
 import tensorflow as tf
 import json
 from cnn_utils_res import *
+import config_res as config
 
-with open("../../Extrinsic_Calibration_2/parameters.json") as f_in:
+resnet_weights_path = config.net_params['resnet_path']
+
+with open(resnet_weights_path) as f_in:
     parameters = json.load(f_in)
 
 class Resnet:

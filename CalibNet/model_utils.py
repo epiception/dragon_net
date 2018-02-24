@@ -35,19 +35,6 @@ def get_repulsion_loss4(pred, nsample=20, radius=0.07):
     return uniform_loss
 
 
-# def get_emd_loss(pred, gt, radius = 1.0):
-#     """ pred: BxNxC,
-#         label: BxN, """
-#     batch_size = pred.get_shape()[0].value
-#     matchl_out, matchr_out = tf_auctionmatch.auction_match(pred, gt)
-#     matched_out = tf_sampling.gather_point(gt, matchl_out)
-#     dist = tf.reshape((pred - matched_out) ** 2, shape=(batch_size, -1))
-#     dist = tf.reduce_mean(dist, axis=1, keep_dims=True)
-#     dist_norm = dist / radius
-#
-#     emd_loss = tf.reduce_mean(dist_norm)
-#     return emd_loss,matchl_out
-
 def get_emd_loss(pred, gt):
     """ pred: BxNxC,
         label: BxN, """
