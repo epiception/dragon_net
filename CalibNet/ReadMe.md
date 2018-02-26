@@ -15,3 +15,10 @@ Briefly run `resnet_model_full.py` to check for any errors related to tf_ops (fo
     
 If no errors, then training should begin without any issues. All tunable hyperparameters can be found in `config_res.py`. 
 Tuning is required mainly for `alpha_const`, `beta_const`, `learning_rate` (occasionally). Set `current_epoch`, to load the checkpoint, by number.
+
+#### pip install requirements
+ 
+* [tqdm](https://pypi.python.org/pypi/tqdm)
+* [glob](https://docs.python.org/2/library/glob.html)
+* matplotlib (for pyplot)
+* scipy.misc
