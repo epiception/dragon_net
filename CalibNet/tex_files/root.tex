@@ -1,0 +1,440 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%2345678901234567890123456789012345678901234567890123456789012345678901234567890
+%        1         2         3         4         5         6         7         8
+
+\documentclass[letterpaper, 10 pt, conference]{ieeeconf}  % Comment this line out if you need a4paper
+
+%\documentclass[a4paper, 10pt, conference]{ieeeconf}      % Use this line for a4 paper
+
+\IEEEoverridecommandlockouts                              % This command is only needed if 
+                                                          % you want to use the \thanks command
+
+\overrideIEEEmargins                                      % Needed to meet printer requirements.
+
+% See the \addtolength command later in the file to balance the column lengths
+% on the last page of the document
+
+% \usepackage{times}
+% \usepackage{epsfig}
+% \usepackage{graphicx}
+% \usepackage{amsmath}
+% \usepackage{amssymb}
+% \usepackage[utf8]{inputenc}
+% \usepackage[T1]{fontenc}
+% \usepackage{textcomp}
+% \usepackage{gensymb}
+
+
+% The following packages can be found on http:\\www.ctan.org
+\usepackage{graphics} % for pdf, bitmapped graphics files
+\usepackage{epsfig} % for postscript graphics files
+\usepackage{mathptmx} % assumes new font selection scheme installed
+\usepackage{times} % assumes new font selection scheme installed
+\usepackage{amsmath} % assumes amsmath package installed
+\usepackage{amssymb}  % assumes amsmath package installed
+\usepackage{multirow}  % assumes multirow package installed
+\usepackage{gensymb}
+
+\title{\LARGE \bf
+CalibNet: Self-Supervised Extrinsic Calibration using 3D Spatial Transformer Networks
+}
+
+
+\author{Ganesh Iyer, J. Krishna Murthy, and K. Madhava Krishna% <-this % stops a space
+%\thanks{*This work was not supported by any organization}% <-this % stops a space
+\thanks{Ganesh Iyer, and K. Madhava Krishna are affiliated with the Robotics Research Center at the International Institute of Information Technology, Hyderabad, India.
+        J. Krishna Murthy is affiliated with the Montreal Institute for Learning Algorithms at the Universit\'e de Montr\'eal, Quebec, Canada.
+        Authors' email: \tt{\small{giyer2309@gmail.com, krrish94@gmail.com, mkrishna@iiit.ac.in}}}%
+}
+
+
+\begin{document}
+
+
+
+\maketitle
+\thispagestyle{empty}
+\pagestyle{empty}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+
+3D laser scanners and 2D cameras are increasingly being used together as perception sensors in many mobile robots. The effectiveness
+of such an approach, however, depends on the accuracy of the sensors' extrinsic calibration parameters
+so that a properly fused representation of the sensors' data in a common reference frame can be obtained. The vast majority of existing calibration
+techniques to determine these parameters, require significant amounts of data and/or calibration targets, and human effort, severely limiting their applicability.
+In this regard, we present CalibNet: A self-supervised deep neural network capable of automatically estimating the accurate 6-DOF rigid body transformation between a 3D LiDAR and a 2D camera without
+the need for any calibration targets, and in real-time, which can significantly reduce calibration efforts. Our network only takes as input a LiDAR point cloud, the corresponding monocular image, and the camera calibration matrix K. Once the parameters are predicted, we attempt to directly reduce the photometric error and point cloud distance between the transformed and ground truth depth maps, and their respective point clouds. We demonstrate the effectiveness of our method in accurately predicting transformations for a wide range of decalibrations. 
+
+\end{abstract}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{INTRODUCTION}
+
+Perception of visual cues and objects in the environment is an important aspect of autonomous robot navigation. A successful perception system relies on various onboard sensors. A Growing numbers and modalities of sensors are being used in robots. An autonomous car, for instance, uses a 3D LiDAR
+in combination with 2D cameras as the dense color information of the latter complements the sparse distance information of the former.
+With their increasing use, calibration techniques to estimate accurate extrinsic parameters of the sensors are becoming increasingly important. In the same example of an autonomous car,
+without accurate extrinsic parameters, the laser distance measurements cannot be accurately projected onto the camera images, and thus color pixels
+in the images cannot be accurately associated with distance information. 
+
+\begin{figure}
+\begin{center}
+    \setlength{\fboxsep}{2pt}%
+    \setlength{\fboxrule}{1pt}%
+    
+    \includegraphics[width=1.0\linewidth]{Main_net2.png}
+\end{center}
+    \caption{The proposed system, detailing the main layers of the CalibNet pipeline}
+%   \caption{Describes the end-to-end architecture. During testing, we only need to provide frames I_{t} and I_{t+1} and receive the output pose from the $SE(3)$ layer}
+\label{fig:overall_net}
+\end{figure}
+
+
+Over the past several years, a number of calibration techniques have been proposed, specifically for the LiDAR-camera calibration problem.
+Yet, the vast majority of these techniques depend on specific calibration targets such as checkerboards, and require significant
+amounts of manual effort. [CITE unnikrishnan fast, geiger single shot] In addition, they are unable to correct for any deviation due to environmental changes or vibrations during live operation, often rendering the robots inoperable.
+Thus there is an imperative need for automatic and online calibration techniques which can significantly extend the flexibility and adaptability of these robots. 
+There have been some previously published techniques in this area, but most of these techniques still require significant amounts of data, or are dependent on an accurate initialisation for the calibration parameters. [CITE pandey, levinson]
+
+Our work tries to tackle this problem of LiDAR-camera calibration i.e. 
+estimating the 6-DOF rigid body transformation between a 3D LiDAR and a 2D camera, without any assumptions about the existence of any specific features or landmarks
+in the scenes, without any initial estimate for the extrinsic parameters, and in real-time. We leverage the recent success of deep neural networks in classical computer vision tasks such as
+visual recongition (CITE imagenet), in our solution. Furthermore, we employ a self-supervised network to avoid the need for large annotated datasets.
+Our network only takes as input a LiDAR point cloud, the corresponding monocular image, and the camera calibration matrix K, and is able to accurately estimate the extrinsic parameters for any decalibration within the range of $\pm 10^{\circ}$ in rotation and $\pm 0.2$m in translation, about and along any of the axes respectively. 
+To the best of our knowledge, we believe this is the first deep neural network to estimate extrinsic calibration parameters in a self-supervised manner.
+
+The paper is organised as follows: We review related LiDAR-camera calibration techniques in the next section. We detail our
+technique and the network architecture in Sec. III. In Sec. IV we experimentally evaluate our technique and compare it to existing supervised techniques, 
+and conclude the paper in Sec. V.
+
+\section{RELATED WORK}
+
+The LiDAR-camera extrinsic calibration problem has been studied for several years. The existing work can be classified into
+marker-based techniques and marker-less techniques. These techniques can further be classified based on whether they work automatically
+or require manual labelling of correspondences.
+
+Geiger et al. [CITE single shot] proposed an automatic system for accurate camera-camera and LiDAR-camera calibration using just a single image per sensor. However,
+they require a specific calibration setup with multiple checkerboard targets. 
+Recent techniques that solve for the LiDAR-camera extrinsic parameters, using a simpler setup with easy-to-make targets and lesser number of correspondences have been proposed by Dhall et al. [CITE Ankit paper], Pusztai and Hadjer [CITE iccv].
+Yet, these techniques are slow, labour intensive, and require a certain level of technical expertise to use.
+
+Levinson and Thrun proposed one of the first markerless techniques in [CITE 2012 ISER]. Their underlying assumption, which proved to be very robust,
+is that depth discontinuties in laser data should project onto edges in images for an accurate extrinsic calibration. The two feature classes are
+combined and a grid search is used to estimate the optimal extrinsic parameters. Pandey et al. proposed a very similar method in [CITE 2012 AAAI]
+where they try to maximize the mutual information between the LiDAR's intensity of return and the intensity of the corresponding points in the camera's image. However, these calibration
+cost functions are only locally convex and hence rely on a good initialisation for the optimization to converge.
+
+Another class of markerless techniques exists where independent motion estimates from the sensors are used and matched to obtain the extrinsic
+calibration parameters, as shown in [CITE 2015 ICRA] by Taylor and Nieto. They do not rely on any initialisation for the extrinsics, or require any overlapping
+fields of view of the sensors. However, they still require large amounts of data and good motion estimates for accurate results limiting their applicability to offline scenarios.
+
+Recently, deep neural networks have shown tremendous success in classical computer vision tasks such as visual recognition [CITE imagenet], localization [CITE posenet] et al, and correspondence (CITE ucn). Deep Networks have also shown their effectiveness in dealing with unordered point clouds for tasks such as 3D Object Detection and Segmentation (PointNet, PointNet++).
+Yet, surprisingly only few deep neural networks have been applied to the calibration problem. The first deep convolutional neural network for LiDAR-camera calibration was
+proposed in [CITE regnet] by Schneider et al. Using a Network-in-Network based pretrained supervised network, they aim to regress the transformation parameters that accurately aligns the lidar point cloud to the image, by training the network with large amounts of ground truth calibration data.
+While feasible and real-time, the training of such a method requires large amounts of ground truth calibration data and an initial manually calibrated setup. In contrast, our method leverages the recent success of self-supervised networks for tasks like Depth Estimation and Visual Odometry as shown in [CITE SFM-Learner, UndeepVO], and attempts to solve the problem by attempting to reduce the dense photometric error and dense point cloud distance error between the misaligned and target depth maps.
+While we use transformed depth maps as targets, such a map could be found by any stereo reconstruction method and be used for training. 
+Further, since our model is based on the camera model, any intrinsically calibrated camera system can be used for extrinsic calibration using our architecture.
+
+\section{OUR APPROACH}
+
+In this section we present the theory behind our approach, the network architecture, training methodology, and loss function.
+
+\subsection{Network Architecture} 
+
+\begin{figure}
+\begin{center}
+    \setlength{\fboxsep}{2pt}%
+    \setlength{\fboxrule}{1pt}%
+    
+    \includegraphics[width=1.0\linewidth,height=2.0\linewidth]{architecture_Details(3).png}
+\end{center}
+    \caption{Network Architecture}
+%   \caption{Describes the end-to-end architecture. During testing, we only need to provide frames I_{t} and I_{t+1} and receive the output pose from the $SE(3)$ layer}
+\label{fig:overall_net}
+\end{figure}
+
+
+The network consists of 2 non-symmetrical branches, each consisting of a series of convolutions. The main reason for the difference in processing the input frames is that we are trying to extract features from different types of inputs. For the RGB input we use the first 16 layers of a pretrained ResNet-18 network[CITE resnet]. This prevents a difficult training process, preventing learning relevant features from scratch. For the depth map input we use a similar structure as the ResNet-18 network, but with half the number of filters at each layer. The depth maps are initially max-pooled to create semi-dense depth maps. We use a 5x5 window for max-pooling. After concatenating across channels at this stage, we pass this as an input to a series of additonal fully convolutional and batch-normalization steps. (cite paper mentioning bn+conv works better). The output of the network is a 1x6 vector consisting of $\mbox{\boldmath$\xi$} = (\textbf{t} \enspace\mbox{\boldmath$\omega$}) \in se(3)$\\
+
+\textbf{\textit{$\textbf{SO(3)}$ layer:}} An element in $so(3)$ can be converted to $SO(3)$ by using the Exponential Map. The exponential map is simply the matrix exponential over a linear combination of the generators. Given, an
+%\begin{equation}
+    \mbox{\boldmath$\omega$} = (\mbox{\boldmath$\omega_1$}, \mbox{\boldmath$\omega_2$}, \mbox{\boldmath$\omega_3$})
+%\end{equation}
+, the exponential map is defined as
+\begin{equation}
+\begin{split}
+    exp(\mbox{\boldmath$\omega_\times$}) \equiv
+    exp\left(
+    \begin{matrix}
+    0&\mbox{-\boldmath$\omega_3$}&\mbox{\boldmath$\omega_2$}\\ 
+    \mbox{\boldmath$\omega_3$}&0&\mbox{-\boldmath$\omega_1$}\\ 
+    \mbox{-\boldmath$\omega_2$}&\mbox{\boldmath$\omega_1$}&0
+    \end{matrix}
+    \right)\\
+    = I + \omega_\times + \frac{\omega_\times^{2}}{2!} + \frac{\omega_\times^{3}}{3!} + ... 
+\end{split}
+\end{equation} 
+The general closed form solution for the above expression is given by the Rodrigues formula to yield,\\
+
+$exp(\mbox{\boldmath$\omega_\times$}) = I + \dfrac{\sin \theta}{\theta}\omega_\times + \dfrac{1 - \cos \theta}{\theta^{2}}\omega_\times^{2}$\\
+
+This gives us the rotation in \textbf{$R$} in $SO(3)$. Combining with translation predicted by the network gives us a  3D rigid body transformation $\textbf{T}\in SE(3)$ defined as\\
+\begin{equation}
+    \textbf{T} = \binom{\textbf{R} \enspace \textbf{t}}{\textbf{0} \enspace \textbf{1}} \thinspace with \thinspace \textbf{R} \in SO(3) \thinspace and \thinspace \textbf{t} \in \mathbb{R}^3
+\end{equation}\\
+
+\textbf{\textit{3D Spatial Transformer Layer:}} Once we have a predicted a transformation, we use a 3D Spatial Transformer Layer responsible for transforming the input depth map by the predicted transformation $\textbf{T}$. We build upon the work conducted by Handa et. al (cite gvnn) to transform the semi-dense input depth maps.
+
+Given an initial depth estimate, we first project the depth intensity values to 3D using the camera matrix,
+
+\begin{equation}
+\begin{split}
+    \boldmath{K} \equiv
+    \left(
+    \begin{matrix}
+    f_x&0&c_x\\ 
+    0&f_y&c_y\\ 
+    0&0&1\\
+    \end{matrix}
+    \right)\\
+\end{split}
+\end{equation} 
+
+
+Knowing $(f_x, f_y, c_x, c_y)$ allows projecting 2D depth intensity points at metric depth (as provided in the depth maps) using the mapping $\mathbb{\pi}:\mathbb{R}^3\rightarrow\mathbb{R}^2$ as follows,
+
+\begin{equation}
+\begin{split}
+    \mathbb{\pi}^-1(x,y,Z) \rightarrow (X,Y,Z)\\ 
+    X = \dfrac{x - o_x}{fx}Z\\
+    Y = \dfrac{y - o_y}{fy}Z\\
+    Z = Z
+\end{split}
+\end{equation} 
+Once projected, we now apply the predicted transformation to align the point set using homogneous coordinates, and then project to 2D image plane using the camera matrix.
+
+\begin{equation}
+\begin{split}
+    \left(
+    \begin{matrix}
+    x\\ 
+    y\\ 
+    1\\
+    \end{matrix}
+    \right) \equiv
+    \boldmath{K}
+    \mathbf{T}
+    \left(
+    \begin{matrix}
+    X\\ 
+    Y\\ 
+    Z\\
+    1\\
+    \end{matrix}
+    \right)\\
+\end{split}
+\end{equation} 
+
+This is carried out in a diffrentiable manner using the 3D Grid Generator. We scale $(f_x, f_y, c_x, c_y)$ according to the image height and width.\\
+
+\textbf{\textit{Loss Functions:}} The use of dense methods for registration is even more requisite in the case of extrinsic calibration. We use two types of loss terms during training:\\
+
+\textit{1. Photometric Loss:} After transforming the depth map by the predicted $\mathbf{T}$, we check for the dense pixel-wise error (each pixel is encoded with the depth intensity) between predicted depth map and correct depth map. The error term is defined as,
+
+\begin{equation}
+\begin{split}
+    \mathbf{L}_{photo} = \dfrac{1}{2}\sum_{1}^{N}\left(\mathbf{D_{gt}} - K\mathbf{T}\pi^-1[\mathbf{D_{decalib}}] \right)^2
+\end{split}
+\end{equation} 
+,where $\mathbf{D_{gt}}$ is the ground truth depth map and $\mathbf{D_{decalib}}$ is the initial decalibrated depth map. While we use maxpooled ground truth depth maps during training, note that this could be further generalized by using a stereo pair to estimate depth maps, which could be used for training as well.\\
+
+\textit{2. Point Cloud Loss:} In order to further reduce the 3D-3D point distances between the point clouds in metric scale, we experiment with various distance metrics that would be an accurate measure of error in world-coordinates. Note that we don't know correspondences since we are working with unordered point sets, making it a more difficult task. Owing to the recent success of [A Point Set Generation Network for 3D Object Reconstruction from a Single Image] for point cloud generation, we experiment with the following distance measures provided in their work.\\
+
+\textbf{i. Chamfer Distance}: The Chamfer Distance between two point clouds $S_1,S_2 \subseteq \mathbb{R}^3$, is defined as the sum of squared distances of the nearest points between the two clouds. 
+
+\begin{equation}
+\begin{split}
+    d_{CD}(S_1,S_2) = \sum_{x \in S_1} \min_{y \in S_2} \left \| x - y \right \|_{2}^{2} + \sum_{y \in S_2} \min_{x \in S_1} \left \| x - y \right \|_{2}^{2}
+\end{split}
+\end{equation} 
+
+\textbf{ii. Earth Mover's Distance}: The Earth Mover's Distance is originally a measure of dissimilarity between two multi-dimensional distributions. For our problem, given two point clouds $S_1,S_2 \subseteq \mathbb{R}^3$, the optimization essentially tries to solve the assignment problem for each point. In particular, if $\phi$ is a mapping between the two point sets, then we minimize the distance as follows, 
+
+% DONT FORGET TO CITE http://homepages.inf.ed.ac.uk/rbf/CVonline/LOCAL_COPIES/RUBNER/emd.htm
+
+\begin{equation}
+\begin{split}
+    d_{EMD}(S_1,S_2) = \min_{\phi:S_1 \rightarrow S_2} \sum_{x \in S1} \left \| x - \phi(x) \right \|_{2}
+\end{split}
+\end{equation} 
+
+where $\phi: S_1 \rightarrow S_2$ is a bijection.
+
+
+\textbf{iii. Centroid ICP Distance}: Similar to the loss term used for Iterative Closest Point based alignment, we try to minimize the distance between cluster centers of the projected 3D point clouds. The term is defined as,
+
+\begin{equation}
+\begin{split}
+    \mathbf{L}_{icp} = \dfrac{1}{2}\sum_{1}^{N} \sum_{1}^{i}\left \| X_{exp}^i - (\mathbf{R}X_{decalib}^i + \mathbf{t}) \right \|^2
+\end{split}
+\end{equation} 
+, where $X_{exp}$ is a possible cluster center of the expected point cloud, and $X_{decalib}$ is a cluster center from the decalibrated point cloud projected to world coordinate frame.
+
+
+
+\subsection{Training and Layer Implementation Details}
+
+To implement the various layers for training, we use the Tensorflow library, and implement in a fashion such that all layers are differentiable in an end-to-end fashion. Since we deal with sparse pointclouds and depth maps during training we cannot directly apply dense operations to entire tensors. For this we heavily utilize the \textit{scatter\_nd} operation. This operation allows sparse updates at various tensor locations, to update the new depth value at the certain location. Our Bilinear Sampling Layer also uses this operation for allocating pixel values from sparse neighbour locations. In order to prevent rewriting pixel value updates to the same index locations, we use a Cantor Pairing function, and eliminate equal index locations before updating depth intensity value.  
+
+For training the network we use the Adam Optimizer function, with an initial learning rate of $1e^-4$, and momentum equal to $0.9$. We decrease the learning rate by 0.5 every few epochs. We train for a total of 16 epochs. Using earth mover distance in the cost function, we set $\alpha_{ph}$ equal to $1.0$ and $\beta_{ph}$ equal to $0.1$ and slowly increase its value to $1.75$. We found this suitable for training and the network generalized well to the validation set. 
+
+\subsection{Iterative Re-alignment}
+
+So far we have presented a solution where an input point cloud is only transformed once before checking for photometric and distance errors. We also present experiments using iterative re-alignment within the network. While some earlier works employ this method externally, by resupplying the inputs, our method is capable of applying this in an end-to-end fashion within the network. For this, once the network predicts an initial transformation $\mathbf{T'}$, we transform the input point cloud by the predicted transformation. The resulting depth map would now consist of the input depth map transformed by the predicted transformation. We now feed this as a new input, in order to predict a residual transform $\mathbf{T'}$. The error is now computed after computing the product of the transformations. 
+
+\begin{equation}
+\begin{split}
+    \widehat{T} = (T)(T')(T'')(T''')...
+\end{split}
+\end{equation} 
+
+At each step, the error is computed against the target depth map and point cloud. Resembling a recurrent unit, when unrolled, the network resembles the work in [stacked hourglass net], where the gradient flow at each iteration is against the correctly transformed point cloud, and its resultant depth map. 
+
+\begin{figure*}
+\begin{center}
+%\fbox{\rule{0pt}{2in} \rule{.9\linewidth}{0pt}}
+    \includegraphics[width=1.0\linewidth,height=0.80\linewidth]{depth_maps_3.png}
+\end{center}
+    \caption{Estimating calibration for decalibrated max-pooled depth maps. In the above figure, (a) RGB input image, (b) decalibrated depth maps as input, (c) decalibration with respect to RGB image, (d) Predicted transformation for calibrating map through spatial transformer, (e) Ground Truth}
+%   \caption{Describes the end-to-end architecture. During testing, we only need to provide frames I_{t} and I_{t+1} and receive the output pose from the $SE(3)$ layer}
+\label{fig:long}
+\end{figure*}
+
+\section{EXPERIMENTS AND EVALUATION}
+
+Our experiments mainly comprised of evaluating training and validation with respect to the various point cloud distance metrics. 
+An important observation to note is that for calibration, while translation measure between the camera and LIDAR coordinate frames can be roughly estimated using measuring devices, it is very difficult to measure even rough estimates of the yaw, pitch and roll angles using any measurement methods. Stressing on the difficulty of estimating rotation components, we show a strong correlation through our experiments in using dense photometric error between the predicted and target depth map to find the rotation matrix.  
+We also associate point cloud distance measures with estimating translation values. Due to self-supervision, we observed that while photometric loss helps in finding rotation values, there is no bound on translation values. This leads to erroneous initial translation values during training. We observed that point cloud distance measures serve as an important bound during training to ensure that translation estimates slowly achieve the requisite target values. 
+While we found the original end-to-end architecture effective in estimating correct rotation values during testing, we found it difficult to estimate translation values, since residual values are hardly affected by small translation changes, but highly sensitive to erroneous rotation values. To remedy this, we train in an iterative fashion to re-estimate translation values. We experiment with freezing the initial model, and use the rotation predictions transform the decalibrated point cloud. We then use only point cloud distance measures to estimate translation values. We train this model with both ground truth rotations, and our estimated rotation values with frozen weights. We use Earth Mover's distance as our cloud distance metric of choice. We observed that it scales better to estimating large translation values. Since the training time would increase drastically when calculating earth mover's distance for dense point sets, we use the sparse depth maps (without max-pooling). We also further sparsify the cloud by finding centroids of local clusters. We find 4096 centroid locations in the predicted and ground truth point clouds, and use these centroids to calculate Earth Movers Distance. We found this to improve training time without compromising on translation accuracy loss during training. 
+
+\subsection{Dataset Preparation}
+
+We prepare our dataset from the KITTI Dataset [cite geiger]. Specifically, we train on the raw data recordings. To maintain uniformity, we use the all frames and LIDAR point cloud data from the (26/09/2011) driving sequence. To create decalibrated depth maps, we transform the original point clouds by randomly transforming the point clouds. We sample $(t_x,t_y,t_z,\omega_x,\omega_y,\omega_z)$ randomly from a uniform distribution in the range of $\pm$ 10 degree rotation and $\pm$ 0.2m translation in any of the axes. We believe this is a good range of values to correctly emulate possible cross calibration errors that may not be directly corrected by marker-based methods or measurement devices. The network takes as input these decalibrated depth maps and a corresponding RGB image. We use the frames from image\_02, referring to the left color camera for the RGB input. We expect the network to output the $se(3)$ vectors that would correspond to the inverse transformations of the input decalibration. Overall, we generate a total of 24000 pairs for training and 6000 pairs for testing, each decalibrated by a random transform in the range.
+
+\subsection{Results}
+
+We show results of our base architecture for rotation values and an additional iteration for translation.
+
+\subsubsection{Rotation estimation}
+
+Our network performs exceedingly well in the case of rotation estimation. We report a mean absolute error (MAE) value for rotation angles on the test set: ({Yaw:} $\mathbf{0.15\degree}$, {Pitch:} $\mathbf{0.9\degree}$, {Roll:} $\mathbf{0.18\degree}$). Our pipeline exceeds the supervised RegNet in the case of Yaw and Roll values. 
+
+\subsubsection{Translations given Ground Truth}
+
+Since we observed that a single iteration fails to correctly estimate translation, we decided to further fine tune on translation values. During training for translation values, we rotate the input depth map with the ground truth rotation values and use the spatial transformer to apply the new estimate for translation. For this, we only reduce use EMD as the error metric. We report translations: ({X:} $\mathbf{4.2cm}$, {Y:} $\mathbf{1.6cm}$, {Z:} $\mathbf{7.22cm}$)
+
+% \subsection{Figures and Tables}
+
+% Positioning Figures and Tables: Place figures and tables at the top and bottom of columns. Avoid placing them in the middle of columns. Large figures and tables may span across both columns. Figure captions should be below the figures; table heads should appear above the tables. Insert figures and tables after they are cited in the text. Use the abbreviation �Fig. 1�, even at the beginning of a sentence.
+
+% \begin{table}[h]
+% \begin{center}
+% \begin{tabular}{|p{1.8cm}|l|l|l||l|l|l|}
+% \hline
+% Mean Absolute Error (MAE) & \multicolumn{3}{|c|}{Rotation (in \degree)} & \multicolumn{3}{|p{1.2cm}|}{Translation (cm)}\\
+% \hline
+%  & x & y & z & x & y & z \\ \hline
+% RegNet &  $0.24$ & $0.25$ & $0.36$ & $7$ & $7$ & $4$ \\ \hline
+% \textbf{CalibNet(ours.)} &  $\mathbf{0.15}$ & $0.9$ & $\mathbf{0.18}$ & $4$ & $1$ & $7$ \\ \hline
+% \end{tabular}
+% \end{center}
+% \caption{Absolute Translation Error (ATE) for Test Sequences using Supervised method}
+% \end{table}
+
+
+   \begin{figure}[thpb]
+      \centering
+      \framebox{\parbox{3in}{We suggest that you use a text box to insert a graphic (which is ideally a 300 dpi TIFF or EPS file, with all fonts embedded) because, in an document, this method is somewhat more stable than directly inserting a picture.
+}}
+      %\includegraphics[scale=1.0]{figurefile}
+      \caption{Inductance of oscillation winding on amorphous
+       magnetic core versus DC bias magnetic field}
+      \label{figurelabel}
+   \end{figure}
+   
+
+Figure Labels: Use 8 point Times New Roman for Figure labels. Use words rather than symbols or abbreviations when writing Figure axis labels to avoid confusing the reader. As an example, write the quantity �Magnetization�, or �Magnetization, M�, not just �M�. If including units in the label, present them within parentheses. Do not label axes only with units. In the example, write �Magnetization (A/m)� or �Magnetization {A[m(1)]}�, not just �A/m�. Do not label axes with a ratio of quantities and units. For example, write �Temperature (K)�, not �Temperature/K.�
+
+\section{CONCLUSIONS}
+
+A conclusion section is not required. Although a conclusion may review the main points of the paper, do not replicate the abstract as the conclusion. A conclusion might elaborate on the importance of the work or suggest applications and extensions. 
+
+\addtolength{\textheight}{-12cm}   % This command serves to balance the column lengths
+                                  % on the last page of the document manually. It shortens
+                                  % the textheight of the last page by a suitable amount.
+                                  % This command does not take effect until the next page
+                                  % so it should come on the page before the last. Make
+                                  % sure that you do not shorten the textheight too much.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{APPENDIX}
+
+Appendixes should appear before the acknowledgment.
+
+\section*{ACKNOWLEDGMENT}
+
+The preferred spelling of the word �acknowledgment� in America is without an �e� after the �g�. Avoid the stilted expression, �One of us (R. B. G.) thanks . . .�  Instead, try �R. B. G. thanks�. Put sponsor acknowledgments in the unnumbered footnote on the first page.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+References are important to the reader; therefore, each citation must be complete and correct. If at all possible, references should be commonly available publications.
+
+
+
+\begin{thebibliography}{99}
+
+\bibitem{c1} G. O. Young, �Synthetic structure of industrial plastics (Book style with paper title and editor),� 	in Plastics, 2nd ed. vol. 3, J. Peters, Ed.  New York: McGraw-Hill, 1964, pp. 15�64.
+\bibitem{c2} W.-K. Chen, Linear Networks and Systems (Book style).	Belmont, CA: Wadsworth, 1993, pp. 123�135.
+\bibitem{c3} H. Poor, An Introduction to Signal Detection and Estimation.   New York: Springer-Verlag, 1985, ch. 4.
+\bibitem{c4} B. Smith, �An approach to graphs of linear forms (Unpublished work style),� unpublished.
+\bibitem{c5} E. H. Miller, �A note on reflector arrays (Periodical style�Accepted for publication),� IEEE Trans. Antennas Propagat., to be publised.
+\bibitem{c6} J. Wang, �Fundamentals of erbium-doped fiber amplifiers arrays (Periodical style�Submitted for publication),� IEEE J. Quantum Electron., submitted for publication.
+\bibitem{c7} C. J. Kaufman, Rocky Mountain Research Lab., Boulder, CO, private communication, May 1995.
+\bibitem{c8} Y. Yorozu, M. Hirano, K. Oka, and Y. Tagawa, �Electron spectroscopy studies on magneto-optical media and plastic substrate interfaces(Translation Journals style),� IEEE Transl. J. Magn.Jpn., vol. 2, Aug. 1987, pp. 740�741 [Dig. 9th Annu. Conf. Magnetics Japan, 1982, p. 301].
+\bibitem{c9} M. Young, The Techincal Writers Handbook.  Mill Valley, CA: University Science, 1989.
+\bibitem{c10} J. U. Duncombe, �Infrared navigation�Part I: An assessment of feasibility (Periodical style),� IEEE Trans. Electron Devices, vol. ED-11, pp. 34�39, Jan. 1959.
+\bibitem{c11} S. Chen, B. Mulgrew, and P. M. Grant, �A clustering technique for digital communications channel equalization using radial basis function networks,� IEEE Trans. Neural Networks, vol. 4, pp. 570�578, July 1993.
+\bibitem{c12} R. W. Lucky, �Automatic equalization for digital communication,� Bell Syst. Tech. J., vol. 44, no. 4, pp. 547�588, Apr. 1965.
+\bibitem{c13} S. P. Bingulac, �On the compatibility of adaptive controllers (Published Conference Proceedings style),� in Proc. 4th Annu. Allerton Conf. Circuits and Systems Theory, New York, 1994, pp. 8�16.
+\bibitem{c14} G. R. Faulhaber, �Design of service systems with priority reservation,� in Conf. Rec. 1995 IEEE Int. Conf. Communications, pp. 3�8.
+\bibitem{c15} W. D. Doyle, �Magnetization reversal in films with biaxial anisotropy,� in 1987 Proc. INTERMAG Conf., pp. 2.2-1�2.2-6.
+\bibitem{c16} G. W. Juette and L. E. Zeffanella, �Radio noise currents n short sections on bundle conductors (Presented Conference Paper style),� presented at the IEEE Summer power Meeting, Dallas, TX, June 22�27, 1990, Paper 90 SM 690-0 PWRS.
+\bibitem{c17} J. G. Kreifeldt, �An analysis of surface-detected EMG as an amplitude-modulated noise,� presented at the 1989 Int. Conf. Medicine and Biological Engineering, Chicago, IL.
+\bibitem{c18} J. Williams, �Narrow-band analyzer (Thesis or Dissertation style),� Ph.D. dissertation, Dept. Elect. Eng., Harvard Univ., Cambridge, MA, 1993. 
+\bibitem{c19} N. Kawasaki, �Parametric study of thermal and chemical nonequilibrium nozzle flow,� M.S. thesis, Dept. Electron. Eng., Osaka Univ., Osaka, Japan, 1993.
+\bibitem{c20} J. P. Wilkinson, �Nonlinear resonant circuit devices (Patent style),� U.S. Patent 3 624 12, July 16, 1990. 
+
+
+
+
+
+
+\end{thebibliography}
+
+
+
+
+\end{document}
